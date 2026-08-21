@@ -1,1 +1,238 @@
 
+name: Non-Production Environment Scan
+
+on:
+  workflow_dispatch:
+    inputs:
+      brands:
+        description: 'Brands to scan. Use "all" or comma-separated IDs, e.g. can-am,sea-doo'
+        required: true
+        default: 'all'
+
+      max_pages:
+        description: 'Maximum number of pages per brand'
+        required: true
+        default: '10000'
+
+      concurrency:
+        description: 'Concurrent pages per brand'
+        required: true
+        default: '5'
+
+      fail_on_findings:
+        description: 'Fail brand job when non-production URLs are found'
+        required: true
+        type: boolean
+        default: false
+
+jobs:
+
+  prepare:
+    name: Prepare brand matrix
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build brand matrix
+        id: matrix
+        env:
+          SELECTED_BRANDS: ${{ inputs.brands }}
+        run: |
+          python <<'PY'
+          import json
+          import os
+
+          with open("config/brands.json", encoding="utf-8") as file:
+              config = json.load(file)
+
+          brands = config["brands"]
+
+          selected = os.environ.get("SELECTED_BRANDS", "all").strip()
+
+          if selected.lower() != "all":
+              requested = {
+                  brand.strip()
+                  for brand in selected.split(",")
+                  if brand.strip()
+              }
+
+              brands = [
+                  brand
+                  for brand in brands
+                  if brand["id"] in requested
+              ]
+
+              found = {
+                  brand["id"]
+                  for brand in brands
+              }
+
+              missing = requested - found
+
+              if missing:
+                  raise SystemExit(
+                      "Unknown brand(s): " +
+                      ", ".join(sorted(missing))
+                  )
+
+          if not brands:
+              raise SystemExit("No brands selected.")
+
+          matrix = json.dumps(
+              {"brand": brands},
+              separators=(",", ":")
+          )
+
+          print("Matrix:")
+          print(json.dumps(
+              {"brand": brands},
+              indent=2
+          ))
+
+          with open(
+              os.environ["GITHUB_OUTPUT"],
+              "a",
+              encoding="utf-8"
+          ) as output:
+              output.write(f"matrix={matrix}\n")
+          PY
+
+
+  scan:
+    name: Scan ${{ matrix.brand.name }}
+
+    needs:
+      - prepare
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+
+      - name: Install dependencies
+        run: npm install
+
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+
+      - name: TypeScript check
+        run: npm run typecheck
+
+
+      - name: ESLint
+        run: npm run lint
+
+
+      - name: Prettier check
+        run: npm run format:check
+
+
+      - name: Scan ${{ matrix.brand.name }}
+        id: scan
+        continue-on-error: true
+        env:
+          SCAN_NAME: ${{ matrix.brand.id }}
+          MAX_PAGES: ${{ inputs.max_pages }}
+          CONCURRENCY: ${{ inputs.concurrency }}
+          FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
+        run: |
+          npm run scan -- "${{ matrix.brand.url }}"
+
+
+      - name: Add result to GitHub summary
+        if: always()
+        env:
+          BRAND_NAME: ${{ matrix.brand.name }}
+          BRAND_ID: ${{ matrix.brand.id }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const brandId = process.env.BRAND_ID;
+          const brandName = process.env.BRAND_NAME;
+
+          const path = `output/${brandId}/latest.json`;
+
+          if (!fs.existsSync(path)) {
+            console.log(`Report not found: ${path}`);
+            process.exit(0);
+          }
+
+          const report = JSON.parse(
+            fs.readFileSync(path, 'utf8')
+          );
+
+          const summary = report.summary;
+
+          const result =
+            summary.totalFindings > 0
+              ? '❌ Findings detected'
+              : '✅ No findings';
+
+          const markdown = `
+          # ${brandName}
+
+          **Result:** ${result}
+
+          | Metric | Result |
+          |---|---:|
+          | Pages scanned | ${summary.pagesScanned} |
+          | Links checked | ${summary.linksChecked} |
+          | Failed pages | ${summary.failedPages} |
+          | Direct non-prod links | ${summary.directNonProdLinks} |
+          | Redirects to non-prod | ${summary.redirectsToNonProd} |
+          | Total findings | ${summary.totalFindings} |
+          | Matching pages | ${summary.matchingPages} |
+          | Scan completed | ${summary.scanCompleted ? 'Yes' : 'No'} |
+          | Scan limit reached | ${summary.scanLimitReached ? 'Yes' : 'No'} |
+
+          `;
+
+          fs.appendFileSync(
+            process.env.GITHUB_STEP_SUMMARY,
+            markdown
+          );
+          NODE
+
+
+      - name: Upload ${{ matrix.brand.name }} report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: non-prod-report-${{ matrix.brand.id }}
+          path: output/${{ matrix.brand.id }}/
+          if-no-files-found: warn
+          retention-days: 30
+
+
+      - name: Fail job when strict mode finds issues
+        if: |
+          inputs.fail_on_findings &&
+          steps.scan.outcome == 'failure'
+        run: |
+          echo "Non-production environment findings detected."
+          exit 1
