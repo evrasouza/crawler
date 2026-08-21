@@ -2,11 +2,17 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
+  {
+    ignores: ['node_modules/**', 'output/**'],
+  },
+
   eslint.configs.recommended,
 
-  ...tseslint.configs.recommendedTypeChecked,
-
   {
+    files: ['src/**/*.ts'],
+
+    extends: [...tseslint.configs.recommendedTypeChecked],
+
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -14,18 +20,17 @@ export default tseslint.config(
       },
     },
 
-    ignores: [
-      'node_modules/**',
-      'output/**',
-    ],
-  },
-
-  {
-    files: ['src/**/*.ts'],
-
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
       '@typescript-eslint/no-misused-promises': 'error',
+    },
+  },
+
+  {
+    files: ['**/*.mjs'],
+
+    languageOptions: {
+      sourceType: 'module',
     },
   },
 );
