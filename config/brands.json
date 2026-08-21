@@ -1,0 +1,24 @@
+{
+  "brands": [
+    {
+      "id": "can-am",
+      "name": "Can-Am",
+      "url": "https://can-am.brp.com/"
+    },
+    {
+      "id": "sea-doo",
+      "name": "Sea-Doo",
+      "url": "https://www.sea-doo.com/"
+    },
+    {
+      "id": "ski-doo",
+      "name": "Ski-Doo",
+      "url": "https://www.ski-doo.com/"
+    },
+    {
+      "id": "lynx",
+      "name": "Lynx",
+      "url": "https://www.brplynx.com/"
+    }
+  ]
+}
