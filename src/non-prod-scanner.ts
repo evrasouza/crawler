@@ -314,28 +314,31 @@ function isNonProdUrl(url: string): boolean {
       return false;
     }
 
-    /**
-     * Split the hostname into individual tokens.
-     *
-     * Example:
-     *
-     * staging-can-am.brp.com
-     *
-     * becomes:
-     *
-     * [
-     *   "staging",
-     *   "can",
-     *   "am",
-     *   "brp",
-     *   "com"
-     * ]
-     */
     const hostnameParts = hostname.split('.').flatMap((part) => part.split('-'));
 
     return NON_PROD_HOST_PATTERNS.some((pattern) => hostnameParts.includes(pattern.toLowerCase()));
   } catch {
     return false;
+  }
+}
+
+/**
+ * Returns which non-production environment was identified
+ * in the URL hostname.
+ */
+function detectEnvironment(url: string): string | null {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+
+    const hostnameParts = hostname.split('.').flatMap((part) => part.split('-'));
+
+    const environment = NON_PROD_HOST_PATTERNS.find((pattern) =>
+      hostnameParts.includes(pattern.toLowerCase()),
+    );
+
+    return environment || null;
+  } catch {
+    return null;
   }
 }
 
@@ -489,9 +492,6 @@ async function scanPage(context: BrowserContext, url: string): Promise<void> {
 
       console.log('');
 
-      /**
-       * Do not continue crawling inside another environment.
-       */
       return;
     }
 
@@ -571,9 +571,6 @@ async function scanPage(context: BrowserContext, url: string): Promise<void> {
 
         console.log('');
 
-        /**
-         * Do not add non-production URLs to the crawl queue.
-         */
         continue;
       }
 
@@ -700,16 +697,15 @@ async function saveJsonReports(report: ScanReport): Promise<{
   versionedPath: string;
 
   latestPath: string;
+
+  findingsPath: string;
+
+  findingsByPagePath: string;
 }> {
   await mkdir(OUTPUT_DIRECTORY, {
     recursive: true,
   });
 
-  /**
-   * Example:
-   *
-   * 2026-08-21T13-45-32
-   */
   const timestamp = new Date()
     .toISOString()
     .replace(/:/g, '-')
@@ -719,25 +715,143 @@ async function saveJsonReports(report: ScanReport): Promise<{
 
   const latestFileName = 'latest.json';
 
+  const findingsFileName = 'findings.json';
+
+  const findingsByPageFileName = 'findings-by-page.json';
+
   const versionedPath = join(OUTPUT_DIRECTORY, versionedFileName);
 
   const latestPath = join(OUTPUT_DIRECTORY, latestFileName);
 
-  const json = JSON.stringify(report, null, 2);
+  const findingsPath = join(OUTPUT_DIRECTORY, findingsFileName);
+
+  const findingsByPagePath = join(OUTPUT_DIRECTORY, findingsByPageFileName);
 
   /**
-   * Historical/versioned report.
+   * Complete report.
    */
-  await writeFile(versionedPath, json, 'utf-8');
+  const completeJson = JSON.stringify(report, null, 2);
+
+  await writeFile(versionedPath, completeJson, 'utf-8');
+
+  await writeFile(latestPath, completeJson, 'utf-8');
 
   /**
-   * Always represents the most recent scan.
+   * ==========================================================
+   * QA-FRIENDLY FINDINGS REPORT
+   * ==========================================================
    */
-  await writeFile(latestPath, json, 'utf-8');
+
+  const findingsReport = {
+    scanName: report.scan.name,
+
+    startUrl: report.scan.startUrl,
+
+    productionHost: report.scan.productionHost,
+
+    generatedAt: report.scan.completedAt,
+
+    scanCompleted: report.summary.scanCompleted,
+
+    scanLimitReached: report.summary.scanLimitReached,
+
+    summary: {
+      totalFindings: report.summary.totalFindings,
+
+      affectedPages: report.summary.matchingPages,
+
+      directNonProdLinks: report.summary.directNonProdLinks,
+
+      redirectsToNonProd: report.summary.redirectsToNonProd,
+    },
+
+    findings: report.findings.map((finding) => ({
+      id: finding.id,
+
+      type: finding.type,
+
+      environment: detectEnvironment(finding.finalUrl),
+
+      sourcePage: finding.sourcePage,
+
+      linkText: finding.linkText,
+
+      incorrectUrl:
+        finding.type === 'DIRECT_NON_PROD_LINK' ? finding.originalUrl : finding.finalUrl,
+
+      originalUrl: finding.originalUrl,
+
+      finalUrl: finding.finalUrl,
+
+      redirectChain: finding.redirectChain,
+    })),
+  };
+
+  await writeFile(findingsPath, JSON.stringify(findingsReport, null, 2), 'utf-8');
+
+  /**
+   * ==========================================================
+   * FINDINGS GROUPED BY SOURCE PAGE
+   * ==========================================================
+   */
+
+  const pages = report.matchingPages.map((sourcePage) => {
+    const pageFindings = report.findings.filter((finding) => finding.sourcePage === sourcePage);
+
+    return {
+      sourcePage,
+
+      totalFindings: pageFindings.length,
+
+      findings: pageFindings.map((finding) => ({
+        id: finding.id,
+
+        type: finding.type,
+
+        environment: detectEnvironment(finding.finalUrl),
+
+        linkText: finding.linkText,
+
+        incorrectUrl:
+          finding.type === 'DIRECT_NON_PROD_LINK' ? finding.originalUrl : finding.finalUrl,
+
+        originalUrl: finding.originalUrl,
+
+        finalUrl: finding.finalUrl,
+
+        redirectChain: finding.redirectChain,
+      })),
+    };
+  });
+
+  const findingsByPageReport = {
+    scanName: report.scan.name,
+
+    startUrl: report.scan.startUrl,
+
+    generatedAt: report.scan.completedAt,
+
+    scanCompleted: report.summary.scanCompleted,
+
+    scanLimitReached: report.summary.scanLimitReached,
+
+    affectedPages: pages.length,
+
+    totalFindings: report.summary.totalFindings,
+
+    pages,
+  };
+
+  await writeFile(findingsByPagePath, JSON.stringify(findingsByPageReport, null, 2), 'utf-8');
 
   return {
     versionedPath,
+
     latestPath,
+
+    findingsPath,
+
+    findingsByPagePath,
   };
 }
 
@@ -930,37 +1044,27 @@ async function main(): Promise<void> {
     await browser.close();
   }
 
-  /**
-   * Redirects are validated during the normal page navigation.
-   *
-   * There is intentionally no separate redirect-validation phase
-   * after the crawl has completed. This avoids navigating through
-   * all discovered URLs a second time.
-   */
-
   const report = createReport();
 
   printReport(report);
 
-  const { versionedPath, latestPath } = await saveJsonReports(report);
+  const { versionedPath, latestPath, findingsPath, findingsByPagePath } =
+    await saveJsonReports(report);
 
   console.log('');
 
   console.log('JSON output:');
 
-  console.log(`Versioned: ${versionedPath}`);
+  console.log(`Versioned:        ${versionedPath}`);
 
-  console.log(`Latest:    ${latestPath}`);
+  console.log(`Latest:           ${latestPath}`);
+
+  console.log(`Findings:         ${findingsPath}`);
+
+  console.log(`Findings by page: ${findingsByPagePath}`);
 
   console.log('');
 
-  /**
-   * In report-only mode, findings are reported without failing
-   * the process.
-   *
-   * In strict mode, any finding causes exit code 1, allowing
-   * GitHub Actions to use the scanner as a quality gate.
-   */
   if (FAIL_ON_FINDINGS && findings.length > 0) {
     console.error(`❌ Scan failed: ${findings.length} non-production finding(s) detected.`);
 

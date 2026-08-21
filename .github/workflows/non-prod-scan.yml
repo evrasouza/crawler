@@ -174,29 +174,122 @@ jobs:
           );
 
           const summary = report.summary;
+          const findings = report.findings || [];
 
           const result =
             summary.totalFindings > 0
-              ? '❌ Findings detected'
+              ? `❌ ${summary.totalFindings} finding(s) detected`
               : '✅ No findings';
 
-          const markdown = `
+          const completionStatus =
+            summary.scanCompleted
+              ? '✅ Complete'
+              : '⚠️ Incomplete';
+
+          const limitStatus =
+            summary.scanLimitReached
+              ? '⚠️ Yes'
+              : 'No';
+
+          let markdown = `
           # ${brandName}
 
           **Result:** ${result}
 
+          ## Scan Overview
+
           | Metric | Result |
           |---|---:|
-          | Pages scanned | ${summary.pagesScanned} |
-          | Links checked | ${summary.linksChecked} |
-          | Failed pages | ${summary.failedPages} |
-          | Direct non-prod links | ${summary.directNonProdLinks} |
-          | Redirects to non-prod | ${summary.redirectsToNonProd} |
-          | Total findings | ${summary.totalFindings} |
-          | Matching pages | ${summary.matchingPages} |
-          | Scan completed | ${summary.scanCompleted ? 'Yes' : 'No'} |
-          | Scan limit reached | ${summary.scanLimitReached ? 'Yes' : 'No'} |
+          | Pages scanned | ${summary.pagesScanned.toLocaleString()} |
+          | Links checked | ${summary.linksChecked.toLocaleString()} |
+          | Failed pages | ${summary.failedPages.toLocaleString()} |
+          | Direct non-prod links | ${summary.directNonProdLinks.toLocaleString()} |
+          | Redirects to non-prod | ${summary.redirectsToNonProd.toLocaleString()} |
+          | Total findings | ${summary.totalFindings.toLocaleString()} |
+          | Affected pages | ${summary.matchingPages.toLocaleString()} |
+          | Scan completed | ${completionStatus} |
+          | Scan limit reached | ${limitStatus} |
 
+          `;
+
+          if (summary.scanLimitReached) {
+            markdown += `
+          > ⚠️ **Scan limit reached.**
+          >
+          > The crawler stopped after ${summary.pagesScanned.toLocaleString()} pages.
+          > Additional findings may exist beyond the configured scan limit.
+
+          `;
+          }
+
+          if (findings.length > 0) {
+            const MAX_SUMMARY_FINDINGS = 25;
+
+            const visibleFindings =
+              findings.slice(0, MAX_SUMMARY_FINDINGS);
+
+            markdown += `
+          ## Non-production URLs found
+
+          | # | Type | Source page | Link text | Incorrect target |
+          |---:|---|---|---|---|
+          `;
+
+            for (const finding of visibleFindings) {
+              const type =
+                finding.type === 'DIRECT_NON_PROD_LINK'
+                  ? '🔴 Direct link'
+                  : '🟠 Redirect';
+
+              const linkText =
+                String(finding.linkText || '(no text)')
+                  .replace(/\|/g, '\\|')
+                  .replace(/\n/g, ' ')
+                  .slice(0, 80);
+
+              const sourceUrl = finding.sourcePage;
+
+              const targetUrl =
+                finding.type === 'DIRECT_NON_PROD_LINK'
+                  ? finding.originalUrl
+                  : finding.finalUrl;
+
+              markdown +=
+                `| ${finding.id} ` +
+                `| ${type} ` +
+                `| [View source](${sourceUrl}) ` +
+                `| ${linkText} ` +
+                `| [Open incorrect URL](${targetUrl}) |\n`;
+            }
+
+            if (findings.length > MAX_SUMMARY_FINDINGS) {
+              markdown += `
+
+          Showing the first **${MAX_SUMMARY_FINDINGS}** of **${findings.length}** findings.
+
+          `;
+            }
+
+            markdown += `
+          ## Full reports
+
+          Download the workflow artifact:
+
+          **\`non-prod-report-${brandId}\`**
+
+          It contains:
+
+          - \`latest.json\` — complete latest scan
+          - \`non-prod-scan-*.json\` — historical scan
+          - \`findings.json\` — QA-friendly findings list
+          - \`findings-by-page.json\` — findings grouped by affected page
+
+          `;
+          }
+
+          markdown += `
+          ---
+          Job summary generated at run-time.
           `;
 
           fs.appendFileSync(

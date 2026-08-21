@@ -8,17 +8,17 @@
     {
       "id": "sea-doo",
       "name": "Sea-Doo",
-      "url": "https://www.sea-doo.com/"
+      "url": "https://sea-doo.brp.com"
     },
     {
       "id": "ski-doo",
       "name": "Ski-Doo",
-      "url": "https://www.ski-doo.com/"
+      "url": "https://ski-doo.brp.com/"
     },
     {
       "id": "lynx",
       "name": "Lynx",
-      "url": "https://www.brplynx.com/"
+      "url": "https://www.brplynx.com"
     }
   ]
 }
