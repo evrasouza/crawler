@@ -9,20 +9,20 @@ through GitHub Actions, scan one or multiple brands, generate JSON
 reports, and optionally fail the workflow when non-production URLs are
 found.
 
-------------------------------------------------------------------------
+---
 
 ## What it detects
 
 The scanner currently reports two types of findings:
 
--   **Direct non-production links** --- links found in production pages
-    that already point directly to a non-production hostname.
--   **Redirects to non-production** --- production URLs that redirect
-    the browser to a non-production hostname.
+- **Direct non-production links** --- links found in production pages
+  that already point directly to a non-production hostname.
+- **Redirects to non-production** --- production URLs that redirect
+  the browser to a non-production hostname.
 
 Detected hostname patterns include:
 
-``` text
+```text
 staging
 stage
 dev
@@ -36,23 +36,23 @@ localhost
 127.0.0.1
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Tech stack
 
--   Node.js
--   TypeScript
--   Playwright
--   TSX
--   ESLint
--   Prettier
--   GitHub Actions
+- Node.js
+- TypeScript
+- Playwright
+- TSX
+- ESLint
+- Prettier
+- GitHub Actions
 
-------------------------------------------------------------------------
+---
 
 ## Repository structure
 
-``` text
+```text
 crawler/
 ├── .github/
 │   └── workflows/
@@ -69,24 +69,26 @@ crawler/
 └── README.md
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Supported brands
 
 Brands configured in `config/brands.json`:
 
-  Brand     ID          Start URL
-  --------- ----------- ----------------------------
-  Can-Am    `can-am`    `https://can-am.brp.com/`
-  Sea-Doo   `sea-doo`   `https://sea-doo.brp.com`
-  Ski-Doo   `ski-doo`   `https://ski-doo.brp.com/`
-  Lynx      `lynx`      `https://www.brplynx.com`
+Brand ID Start URL
+
+---
+
+Can-Am `can-am` `https://can-am.brp.com/`
+Sea-Doo `sea-doo` `https://sea-doo.brp.com`
+Ski-Doo `ski-doo` `https://ski-doo.brp.com/`
+Lynx `lynx` `https://www.brplynx.com`
 
 Additional brands can be added by editing `config/brands.json`.
 
 Example:
 
-``` json
+```json
 {
   "id": "example-brand",
   "name": "Example Brand",
@@ -94,30 +96,30 @@ Example:
 }
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Installation
 
 Clone the repository:
 
-``` bash
+```bash
 git clone https://github.com/evrasouza/crawler.git
 cd crawler
 ```
 
 Install dependencies:
 
-``` bash
+```bash
 npm ci
 ```
 
 Install Chromium for Playwright if needed:
 
-``` bash
+```bash
 npx playwright install chromium
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Running locally
 
@@ -125,66 +127,69 @@ npx playwright install chromium
 
 Running without a URL uses Can-Am as the default start URL:
 
-``` bash
+```bash
 npm run scan
 ```
 
 ### Scan a specific website
 
-``` bash
+```bash
 npm run scan -- https://can-am.brp.com/
 ```
 
-``` bash
+```bash
 npm run scan -- https://sea-doo.brp.com/
 ```
 
-``` bash
+```bash
 npm run scan -- https://ski-doo.brp.com/
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Runtime configuration
 
 The scanner supports environment variables for controlling execution.
 
-  -------------------------------------------------------------------------
-  Variable                                    Default Description
-  ---------------------- ---------------------------- ---------------------
-  `START_URL`               `https://can-am.brp.com/` Initial URL used by
-                                                      the crawler
+---
 
-  `SCAN_NAME`                      Start URL hostname Name used for the
-                                                      output directory
+Variable Default Description
 
-  `MAX_PAGES`                                 `10000` Maximum number of
-                                                      pages to crawl
+---
 
-  `CONCURRENCY`                                   `5` Number of pages
-                                                      processed
-                                                      concurrently
+`START_URL` `https://can-am.brp.com/` Initial URL used by
+the crawler
 
-  `NAVIGATION_TIMEOUT`                        `30000` Navigation timeout in
-                                                      milliseconds
+`SCAN_NAME` Start URL hostname Name used for the
+output directory
 
-  `FAIL_ON_FINDINGS`                          `false` Returns exit code 1
-                                                      when findings are
-                                                      detected
+`MAX_PAGES` `10000` Maximum number of
+pages to crawl
 
-  `OUTPUT_DIRECTORY`             `output/<scan-name>` Custom report
-                                                      directory
-  -------------------------------------------------------------------------
+`CONCURRENCY` `5` Number of pages
+processed
+concurrently
+
+`NAVIGATION_TIMEOUT` `30000` Navigation timeout in
+milliseconds
+
+`FAIL_ON_FINDINGS` `false` Returns exit code 1
+when findings are
+detected
+
+`OUTPUT_DIRECTORY` `output/<scan-name>` Custom report
+directory
+-------------------------------------------------------------------------
 
 ### macOS / Linux example
 
-``` bash
+```bash
 MAX_PAGES=100 SCAN_NAME=can-am npm run scan -- https://can-am.brp.com/
 ```
 
 ### Windows PowerShell example
 
-``` powershell
+```powershell
 $env:MAX_PAGES="100"
 $env:SCAN_NAME="can-am"
 npm run scan -- https://can-am.brp.com/
@@ -192,55 +197,55 @@ npm run scan -- https://can-am.brp.com/
 
 To remove the PowerShell variables afterward:
 
-``` powershell
+```powershell
 Remove-Item Env:MAX_PAGES
 Remove-Item Env:SCAN_NAME
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Useful npm commands
 
 ### Run the crawler
 
-``` bash
+```bash
 npm run scan
 ```
 
 ### TypeScript validation
 
-``` bash
+```bash
 npm run typecheck
 ```
 
 ### ESLint
 
-``` bash
+```bash
 npm run lint
 ```
 
 ### Check formatting
 
-``` bash
+```bash
 npm run format:check
 ```
 
 ### Automatically format files
 
-``` bash
+```bash
 npm run format
 ```
 
 A good validation sequence before committing changes is:
 
-``` bash
+```bash
 npm run format
 npm run typecheck
 npm run lint
 npm run format:check
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Reports
 
@@ -248,7 +253,7 @@ Reports are separated by scan or brand name.
 
 Example:
 
-``` text
+```text
 output/
 └── can-am/
     ├── latest.json
@@ -263,16 +268,16 @@ Complete report from the most recent execution.
 
 It contains:
 
--   scan configuration
--   execution timestamps
--   number of pages scanned
--   number of links checked
--   failed pages
--   total findings
--   matching production pages
--   scan completion status
--   scan-limit status
--   complete finding details
+- scan configuration
+- execution timestamps
+- number of pages scanned
+- number of links checked
+- failed pages
+- total findings
+- matching production pages
+- scan completion status
+- scan-limit status
+- complete finding details
 
 ### `non-prod-scan-*.json`
 
@@ -284,7 +289,7 @@ QA-friendly report containing only detected issues.
 
 Example:
 
-``` json
+```json
 {
   "id": 1,
   "type": "DIRECT_NON_PROD_LINK",
@@ -297,10 +302,10 @@ Example:
 
 This makes it easy to identify:
 
--   where the bad link was found
--   the visible link text
--   which environment was detected
--   the incorrect destination
+- where the bad link was found
+- the visible link text
+- which environment was detected
+- the incorrect destination
 
 ### `findings-by-page.json`
 
@@ -308,7 +313,7 @@ Groups findings by the production page where they were found.
 
 This is useful when one page contains multiple invalid links.
 
-------------------------------------------------------------------------
+---
 
 ## Finding types
 
@@ -319,7 +324,7 @@ hostname.
 
 Example:
 
-``` text
+```text
 Production page
 https://can-am.brp.com/example
 
@@ -337,19 +342,19 @@ environment.
 
 The report includes the redirect chain when available.
 
-------------------------------------------------------------------------
+---
 
 ## GitHub Actions
 
 The repository includes the workflow:
 
-``` text
+```text
 .github/workflows/non-prod-scan.yml
 ```
 
 It can be started manually from:
 
-``` text
+```text
 GitHub
 → Actions
 → Non-Production Environment Scan
@@ -362,19 +367,19 @@ GitHub
 
 Run all configured brands:
 
-``` text
+```text
 all
 ```
 
 Run one brand:
 
-``` text
+```text
 can-am
 ```
 
 Run multiple brands:
 
-``` text
+```text
 can-am,sea-doo
 ```
 
@@ -382,13 +387,13 @@ can-am,sea-doo
 
 Example for a quick validation:
 
-``` text
+```text
 100
 ```
 
 Full/default scan:
 
-``` text
+```text
 10000
 ```
 
@@ -396,7 +401,7 @@ Full/default scan:
 
 Default:
 
-``` text
+```text
 5
 ```
 
@@ -404,58 +409,60 @@ Default:
 
 When disabled, the crawler operates in report-only mode:
 
-``` text
+```text
 false
 ```
 
 When enabled, detected findings can fail the brand job and make the
 workflow usable as a quality gate:
 
-``` text
+```text
 true
 ```
 
-------------------------------------------------------------------------
+---
 
 ## GitHub Actions summary
 
 Each brand job generates a summary containing metrics such as:
 
-  Metric                    Example
-  ----------------------- ---------
-  Pages scanned              10,000
-  Links checked             537,339
-  Failed pages                    0
-  Direct non-prod links          72
-  Redirects to non-prod           0
-  Total findings                 72
-  Affected pages                 70
+Metric Example
+
+---
+
+Pages scanned 10,000
+Links checked 537,339
+Failed pages 0
+Direct non-prod links 72
+Redirects to non-prod 0
+Total findings 72
+Affected pages 70
 
 When findings exist, the summary also displays a sample table with:
 
--   finding type
--   source page
--   link text
--   incorrect destination
+- finding type
+- source page
+- link text
+- incorrect destination
 
 Source and target URLs are clickable from the GitHub Actions summary.
 
 For large result sets, the complete data is available in the workflow
 artifact.
 
-------------------------------------------------------------------------
+---
 
 ## GitHub Actions artifacts
 
 Each brand produces an artifact using the format:
 
-``` text
+```text
 non-prod-report-<brand-id>
 ```
 
 Examples:
 
-``` text
+```text
 non-prod-report-can-am
 non-prod-report-sea-doo
 non-prod-report-ski-doo
@@ -464,13 +471,13 @@ non-prod-report-lynx
 
 The artifact contains the JSON reports generated for that brand.
 
-------------------------------------------------------------------------
+---
 
 ## Understanding scan limits
 
 If the crawler reaches `MAX_PAGES`, the report will indicate:
 
-``` text
+```text
 scanCompleted: false
 scanLimitReached: true
 ```
@@ -483,7 +490,7 @@ There may be additional URLs and findings beyond the scanned set.
 For exploratory testing, a low value such as `100` is useful. For
 broader scans, increase the limit appropriately.
 
-------------------------------------------------------------------------
+---
 
 ## Host and locale behavior
 
@@ -495,13 +502,13 @@ geolocation.
 
 For example, starting from:
 
-``` text
+```text
 https://sea-doo.brp.com/
 ```
 
 may lead users in Brazil toward URLs under:
 
-``` text
+```text
 /br/pt/
 ```
 
@@ -512,13 +519,13 @@ If deterministic locale coverage is required, prefer explicit locale
 URLs or extend the brand configuration to define the locales that should
 be scanned.
 
-------------------------------------------------------------------------
+---
 
 ## Quality gate mode
 
 By default:
 
-``` text
+```text
 FAIL_ON_FINDINGS=false
 ```
 
@@ -528,24 +535,24 @@ To use it as a CI quality gate:
 
 ### macOS / Linux
 
-``` bash
+```bash
 FAIL_ON_FINDINGS=true npm run scan -- https://can-am.brp.com/
 ```
 
 ### PowerShell
 
-``` powershell
+```powershell
 $env:FAIL_ON_FINDINGS="true"
 npm run scan -- https://can-am.brp.com/
 ```
 
 When findings exist, the process returns exit code `1`.
 
-------------------------------------------------------------------------
+---
 
 ## Typical QA workflow
 
-``` text
+```text
 1. Select the brand or brands
         ↓
 2. Start the scan locally or in GitHub Actions
@@ -563,7 +570,7 @@ When findings exist, the process returns exit code `1`.
 8. Download GitHub Actions artifacts when needed
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Current scope
 
@@ -575,30 +582,30 @@ a complete website health-check solution.
 
 Possible future extensions include:
 
--   explicit multi-locale scanning
--   HTTP 4xx / 5xx reporting
--   duplicate-link analysis
--   configurable allowed hosts
--   HTML reports
--   CSV export
--   historical comparison between runs
--   Jira-ready defect output
--   scheduled scans
--   consolidated multi-brand reports
+- explicit multi-locale scanning
+- HTTP 4xx / 5xx reporting
+- duplicate-link analysis
+- configurable allowed hosts
+- HTML reports
+- CSV export
+- historical comparison between runs
+- Jira-ready defect output
+- scheduled scans
+- consolidated multi-brand reports
 
-------------------------------------------------------------------------
+---
 
 ## Notes
 
--   URL fragments are removed during normalization to reduce duplicates.
--   Common static assets and downloadable file types are ignored.
--   `mailto:`, `tel:`, `javascript:` and `data:` URLs are ignored.
--   The crawler does not continue crawling inside detected
-    non-production environments.
--   Redirect chains are preserved when relevant.
--   Output is organized per brand/scan name.
+- URL fragments are removed during normalization to reduce duplicates.
+- Common static assets and downloadable file types are ignored.
+- `mailto:`, `tel:`, `javascript:` and `data:` URLs are ignored.
+- The crawler does not continue crawling inside detected
+  non-production environments.
+- Redirect chains are preserved when relevant.
+- Output is organized per brand/scan name.
 
-------------------------------------------------------------------------
+---
 
 ## License
 

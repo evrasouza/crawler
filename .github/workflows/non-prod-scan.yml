@@ -27,7 +27,6 @@ on:
 jobs:
   prepare:
     name: Prepare brand matrix
-
     runs-on: ubuntu-latest
 
     outputs:
@@ -35,7 +34,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Build brand matrix
         id: matrix
@@ -50,7 +49,6 @@ jobs:
               config = json.load(file)
 
           brands = config["brands"]
-
           selected = os.environ.get("SELECTED_BRANDS", "all").strip()
 
           if selected.lower() != "all":
@@ -66,11 +64,7 @@ jobs:
                   if brand["id"] in requested
               ]
 
-              found = {
-                  brand["id"]
-                  for brand in brands
-              }
-
+              found = {brand["id"] for brand in brands}
               missing = requested - found
 
               if missing:
@@ -88,10 +82,7 @@ jobs:
           )
 
           print("Matrix:")
-          print(json.dumps(
-              {"brand": brands},
-              indent=2
-          ))
+          print(json.dumps({"brand": brands}, indent=2))
 
           with open(
               os.environ["GITHUB_OUTPUT"],
@@ -103,7 +94,6 @@ jobs:
 
   scan:
     name: Scan ${{ matrix.brand.name }}
-
     needs:
       - prepare
 
@@ -111,21 +101,20 @@ jobs:
 
     strategy:
       fail-fast: false
-
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -161,7 +150,6 @@ jobs:
 
           const brandId = process.env.BRAND_ID;
           const brandName = process.env.BRAND_NAME;
-
           const path = `output/${brandId}/latest.json`;
 
           if (!fs.existsSync(path)) {
@@ -169,32 +157,30 @@ jobs:
             process.exit(0);
           }
 
-          const report = JSON.parse(
-            fs.readFileSync(path, 'utf8')
-          );
-
+          const report = JSON.parse(fs.readFileSync(path, 'utf8'));
           const summary = report.summary;
           const findings = report.findings || [];
+          const failedPages = report.failedPageDetails || [];
 
-          const result =
+          const findingResult =
             summary.totalFindings > 0
-              ? `❌ ${summary.totalFindings} finding(s) detected`
-              : '✅ No findings';
+              ? `❌ ${summary.totalFindings} non-production finding(s) detected`
+              : '✅ No non-production findings';
 
-          const completionStatus =
-            summary.scanCompleted
-              ? '✅ Complete'
-              : '⚠️ Incomplete';
+          const crawlStatus =
+            summary.failedPages > 0
+              ? `⚠️ ${summary.failedPages} page(s) could not be fully scanned`
+              : '✅ No crawl failures';
 
-          const limitStatus =
-            summary.scanLimitReached
-              ? '⚠️ Yes'
-              : 'No';
+          const completionStatus = summary.scanCompleted ? '✅ Complete' : '⚠️ Incomplete';
+          const limitStatus = summary.scanLimitReached ? '⚠️ Yes' : 'No';
 
           let markdown = `
           # ${brandName}
 
-          **Result:** ${result}
+          **Non-production result:** ${findingResult}
+
+          **Crawl status:** ${crawlStatus}
 
           ## Scan Overview
 
@@ -222,14 +208,48 @@ jobs:
           `;
           }
 
-          if (findings.length > 0) {
-            const MAX_SUMMARY_FINDINGS = 25;
-
-            const visibleFindings =
-              findings.slice(0, MAX_SUMMARY_FINDINGS);
+          if (failedPages.length > 0) {
+            const MAX_FAILED_PAGES = 25;
+            const visibleFailedPages = failedPages.slice(0, MAX_FAILED_PAGES);
 
             markdown += `
-          ## Non-production URLs found
+          ## ⚠️ Crawl warnings / failed pages
+
+          These are navigation or processing failures. They are **not automatically considered non-production findings**.
+
+          | # | Page | Reason | Error |
+          |---:|---|---|---|
+          `;
+
+            for (const failure of visibleFailedPages) {
+              const reason = String(failure.reason || 'UNKNOWN').replace(/\|/g, '\\|');
+              const error = String(failure.error || '(no error details)')
+                .replace(/\|/g, '\\|')
+                .replace(/\n/g, ' ')
+                .slice(0, 140);
+
+              markdown +=
+                `| ${failure.id} ` +
+                `| [Open page](${failure.url}) ` +
+                `| ${reason} ` +
+                `| ${error} |\n`;
+            }
+
+            if (failedPages.length > MAX_FAILED_PAGES) {
+              markdown += `
+
+          Showing the first **${MAX_FAILED_PAGES}** of **${failedPages.length}** failed pages.
+
+          `;
+            }
+          }
+
+          if (findings.length > 0) {
+            const MAX_SUMMARY_FINDINGS = 25;
+            const visibleFindings = findings.slice(0, MAX_SUMMARY_FINDINGS);
+
+            markdown += `
+          ## 🚨 Non-production URLs found
 
           | # | Type | Source page | Link text | Incorrect target |
           |---:|---|---|---|---|
@@ -241,14 +261,12 @@ jobs:
                   ? '🔴 Direct link'
                   : '🟠 Redirect';
 
-              const linkText =
-                String(finding.linkText || '(no text)')
-                  .replace(/\|/g, '\\|')
-                  .replace(/\n/g, ' ')
-                  .slice(0, 80);
+              const linkText = String(finding.linkText || '(no text)')
+                .replace(/\|/g, '\\|')
+                .replace(/\n/g, ' ')
+                .slice(0, 80);
 
               const sourceUrl = finding.sourcePage;
-
               const targetUrl =
                 finding.type === 'DIRECT_NON_PROD_LINK'
                   ? finding.originalUrl
@@ -269,8 +287,9 @@ jobs:
 
           `;
             }
+          }
 
-            markdown += `
+          markdown += `
           ## Full reports
 
           Download the workflow artifact:
@@ -280,27 +299,21 @@ jobs:
           It contains:
 
           - \`latest.json\` — complete latest scan
-          - \`non-prod-scan-*.json\` — historical scan
-          - \`findings.json\` — QA-friendly findings list
-          - \`findings-by-page.json\` — findings grouped by affected page
+          - \`non-prod-scan-*.json\` — historical complete scan
+          - \`findings.json\` — non-production findings only
+          - \`findings-by-page.json\` — findings grouped by source page
+          - \`failed-pages.json\` — pages that could not be fully scanned
 
-          `;
-          }
-
-          markdown += `
           ---
           Job summary generated at run-time.
           `;
 
-          fs.appendFileSync(
-            process.env.GITHUB_STEP_SUMMARY,
-            markdown
-          );
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
           NODE
 
       - name: Upload ${{ matrix.brand.name }} report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: non-prod-report-${{ matrix.brand.id }}
           path: output/${{ matrix.brand.id }}/
