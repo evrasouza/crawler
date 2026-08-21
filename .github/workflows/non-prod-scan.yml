@@ -25,7 +25,6 @@ on:
         default: false
 
 jobs:
-
   prepare:
     name: Prepare brand matrix
 
@@ -35,7 +34,6 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -103,7 +101,6 @@ jobs:
               output.write(f"matrix={matrix}\n")
           PY
 
-
   scan:
     name: Scan ${{ matrix.brand.name }}
 
@@ -118,10 +115,8 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
 
     steps:
-
       - name: Checkout repository
         uses: actions/checkout@v4
-
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -129,26 +124,20 @@ jobs:
           node-version: 22
           cache: npm
 
-
       - name: Install dependencies
         run: npm install
-
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-
       - name: TypeScript check
         run: npm run typecheck
-
 
       - name: ESLint
         run: npm run lint
 
-
       - name: Prettier check
         run: npm run format:check
-
 
       - name: Scan ${{ matrix.brand.name }}
         id: scan
@@ -160,7 +149,6 @@ jobs:
           FAIL_ON_FINDINGS: ${{ inputs.fail_on_findings }}
         run: |
           npm run scan -- "${{ matrix.brand.url }}"
-
 
       - name: Add result to GitHub summary
         if: always()
@@ -217,7 +205,6 @@ jobs:
           );
           NODE
 
-
       - name: Upload ${{ matrix.brand.name }} report
         if: always()
         uses: actions/upload-artifact@v4
@@ -226,7 +213,6 @@ jobs:
           path: output/${{ matrix.brand.id }}/
           if-no-files-found: warn
           retention-days: 30
-
 
       - name: Fail job when strict mode finds issues
         if: |
