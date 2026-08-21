@@ -1,19 +1,8 @@
+import { chromium, type BrowserContext, type Page, type Response } from '@playwright/test';
 
-import {
-  chromium,
-  type BrowserContext,
-  type Page,
-  type Response,
-} from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
 
-import {
-  mkdir,
-  writeFile,
-} from 'node:fs/promises';
-
-import {
-  join,
-} from 'node:path';
+import { join } from 'node:path';
 
 /**
  * ============================================================
@@ -31,10 +20,7 @@ import {
  * Environment variable example:
  * START_URL=https://can-am.brp.com/ npm run scan
  */
-const START_URL =
-  process.argv[2] ||
-  process.env.START_URL ||
-  'https://can-am.brp.com/';
+const START_URL = process.argv[2] || process.env.START_URL || 'https://can-am.brp.com/';
 
 /**
  * Human-readable identifier used to organize the scan output.
@@ -44,9 +30,7 @@ const START_URL =
  *
  * SCAN_NAME=can-am
  */
-const SCAN_NAME =
-  process.env.SCAN_NAME ||
-  new URL(START_URL).hostname;
+const SCAN_NAME = process.env.SCAN_NAME || new URL(START_URL).hostname;
 
 /**
  * Patterns considered to represent non-production environments.
@@ -72,28 +56,21 @@ const NON_PROD_HOST_PATTERNS = [
  *
  * Can be overridden by the MAX_PAGES environment variable.
  */
-const MAX_PAGES =
-  Number(process.env.MAX_PAGES) ||
-  10_000;
+const MAX_PAGES = Number(process.env.MAX_PAGES) || 10_000;
 
 /**
  * Number of pages processed concurrently.
  *
  * Can be overridden by the CONCURRENCY environment variable.
  */
-const CONCURRENCY =
-  Number(process.env.CONCURRENCY) ||
-  5;
+const CONCURRENCY = Number(process.env.CONCURRENCY) || 5;
 
 /**
  * Navigation timeout in milliseconds.
  *
  * Can be overridden by the NAVIGATION_TIMEOUT environment variable.
  */
-const NAVIGATION_TIMEOUT =
-  Number(
-    process.env.NAVIGATION_TIMEOUT,
-  ) || 30_000;
+const NAVIGATION_TIMEOUT = Number(process.env.NAVIGATION_TIMEOUT) || 30_000;
 
 /**
  * Determines whether the process should return exit code 1
@@ -102,9 +79,7 @@ const NAVIGATION_TIMEOUT =
  * false = report-only mode
  * true  = strict / quality-gate mode
  */
-const FAIL_ON_FINDINGS =
-  process.env.FAIL_ON_FINDINGS ===
-  'true';
+const FAIL_ON_FINDINGS = process.env.FAIL_ON_FINDINGS === 'true';
 
 /**
  * Directory where JSON reports will be stored.
@@ -117,9 +92,7 @@ const FAIL_ON_FINDINGS =
  *
  * The directory can also be overridden through OUTPUT_DIRECTORY.
  */
-const OUTPUT_DIRECTORY =
-  process.env.OUTPUT_DIRECTORY ||
-  join('output', SCAN_NAME);
+const OUTPUT_DIRECTORY = process.env.OUTPUT_DIRECTORY || join('output', SCAN_NAME);
 
 /**
  * File extensions ignored by the crawler.
@@ -157,9 +130,7 @@ const IGNORED_EXTENSIONS = [
  * ============================================================
  */
 
-type FindingType =
-  | 'DIRECT_NON_PROD_LINK'
-  | 'REDIRECT_TO_NON_PROD';
+type FindingType = 'DIRECT_NON_PROD_LINK' | 'REDIRECT_TO_NON_PROD';
 
 interface Finding {
   type: FindingType;
@@ -247,11 +218,9 @@ interface ScanReport {
  * ============================================================
  */
 
-const visited =
-  new Set<string>();
+const visited = new Set<string>();
 
-const queued =
-  new Set<string>();
+const queued = new Set<string>();
 
 const queue: string[] = [];
 
@@ -263,14 +232,11 @@ let linksChecked = 0;
 
 let failedPages = 0;
 
-const startedAt =
-  new Date();
+const startedAt = new Date();
 
-const startUrl =
-  new URL(START_URL);
+const startUrl = new URL(START_URL);
 
-const PROD_HOST =
-  startUrl.hostname.toLowerCase();
+const PROD_HOST = startUrl.hostname.toLowerCase();
 
 /**
  * ============================================================
@@ -278,12 +244,9 @@ const PROD_HOST =
  * ============================================================
  */
 
-function normalizeUrl(
-  rawUrl: string,
-): string | null {
+function normalizeUrl(rawUrl: string): string | null {
   try {
-    const url =
-      new URL(rawUrl);
+    const url = new URL(rawUrl);
 
     /**
      * URL fragments do not represent different pages.
@@ -293,12 +256,8 @@ function normalizeUrl(
     /**
      * Remove trailing slash to improve URL deduplication.
      */
-    if (
-      url.pathname !== '/' &&
-      url.pathname.endsWith('/')
-    ) {
-      url.pathname =
-        url.pathname.slice(0, -1);
+    if (url.pathname !== '/' && url.pathname.endsWith('/')) {
+      url.pathname = url.pathname.slice(0, -1);
     }
 
     return url.href;
@@ -307,59 +266,32 @@ function normalizeUrl(
   }
 }
 
-function isIgnoredProtocol(
-  url: string,
-): boolean {
-  const normalized =
-    url.toLowerCase();
+function isIgnoredProtocol(url: string): boolean {
+  const normalized = url.toLowerCase();
 
   return (
-    normalized.startsWith(
-      'mailto:',
-    ) ||
-    normalized.startsWith(
-      'tel:',
-    ) ||
-    normalized.startsWith(
-      'javascript:',
-    ) ||
-    normalized.startsWith(
-      'data:',
-    )
+    normalized.startsWith('mailto:') ||
+    normalized.startsWith('tel:') ||
+    normalized.startsWith('javascript:') ||
+    normalized.startsWith('data:')
   );
 }
 
-function isIgnoredFile(
-  url: string,
-): boolean {
+function isIgnoredFile(url: string): boolean {
   try {
-    const pathname =
-      new URL(url)
-        .pathname
-        .toLowerCase();
+    const pathname = new URL(url).pathname.toLowerCase();
 
-    return IGNORED_EXTENSIONS.some(
-      (extension) =>
-        pathname.endsWith(
-          extension,
-        ),
-    );
+    return IGNORED_EXTENSIONS.some((extension) => pathname.endsWith(extension));
   } catch {
     return true;
   }
 }
 
-function isInternalProdUrl(
-  url: string,
-): boolean {
+function isInternalProdUrl(url: string): boolean {
   try {
-    const parsed =
-      new URL(url);
+    const parsed = new URL(url);
 
-    return (
-      parsed.hostname.toLowerCase() ===
-      PROD_HOST
-    );
+    return parsed.hostname.toLowerCase() === PROD_HOST;
   } catch {
     return false;
   }
@@ -369,22 +301,16 @@ function isInternalProdUrl(
  * Detects hostnames that appear to belong to non-production
  * environments.
  */
-function isNonProdUrl(
-  url: string,
-): boolean {
+function isNonProdUrl(url: string): boolean {
   try {
-    const parsed =
-      new URL(url);
+    const parsed = new URL(url);
 
-    const hostname =
-      parsed.hostname.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
 
     /**
      * The current hostname is considered the production host.
      */
-    if (
-      hostname === PROD_HOST
-    ) {
+    if (hostname === PROD_HOST) {
       return false;
     }
 
@@ -405,56 +331,32 @@ function isNonProdUrl(
      *   "com"
      * ]
      */
-    const hostnameParts =
-      hostname
-        .split('.')
-        .flatMap((part) =>
-          part.split('-'),
-        );
+    const hostnameParts = hostname.split('.').flatMap((part) => part.split('-'));
 
-    return NON_PROD_HOST_PATTERNS.some(
-      (pattern) =>
-        hostnameParts.includes(
-          pattern.toLowerCase(),
-        ),
-    );
+    return NON_PROD_HOST_PATTERNS.some((pattern) => hostnameParts.includes(pattern.toLowerCase()));
   } catch {
     return false;
   }
 }
 
-function enqueue(
-  url: string,
-): void {
-  if (
-    pagesScanned +
-      queued.size >=
-    MAX_PAGES
-  ) {
+function enqueue(url: string): void {
+  if (pagesScanned + queued.size >= MAX_PAGES) {
     return;
   }
 
-  if (
-    visited.has(url)
-  ) {
+  if (visited.has(url)) {
     return;
   }
 
-  if (
-    queued.has(url)
-  ) {
+  if (queued.has(url)) {
     return;
   }
 
-  if (
-    isIgnoredFile(url)
-  ) {
+  if (isIgnoredFile(url)) {
     return;
   }
 
-  if (
-    !isInternalProdUrl(url)
-  ) {
+  if (!isInternalProdUrl(url)) {
     return;
   }
 
@@ -463,21 +365,14 @@ function enqueue(
   queue.push(url);
 }
 
-function addFinding(
-  finding: Finding,
-): void {
-  const alreadyExists =
-    findings.some(
-      (existing) =>
-        existing.type ===
-          finding.type &&
-        existing.sourcePage ===
-          finding.sourcePage &&
-        existing.originalUrl ===
-          finding.originalUrl &&
-        existing.finalUrl ===
-          finding.finalUrl,
-    );
+function addFinding(finding: Finding): void {
+  const alreadyExists = findings.some(
+    (existing) =>
+      existing.type === finding.type &&
+      existing.sourcePage === finding.sourcePage &&
+      existing.originalUrl === finding.originalUrl &&
+      existing.finalUrl === finding.finalUrl,
+  );
 
   if (alreadyExists) {
     return;
@@ -492,41 +387,20 @@ function addFinding(
  * ============================================================
  */
 
-function buildRedirectChain(
-  response: Response,
-  requestedUrl: string,
-): string[] {
-  const requestUrls: string[] =
-    [];
+function buildRedirectChain(response: Response, requestedUrl: string): string[] {
+  const requestUrls: string[] = [];
 
-  let request:
-    | ReturnType<
-        Response['request']
-      >
-    | null =
-    response.request();
+  let request: ReturnType<Response['request']> | null = response.request();
 
   while (request) {
-    requestUrls.unshift(
-      request.url(),
-    );
+    requestUrls.unshift(request.url());
 
-    request =
-      request.redirectedFrom();
+    request = request.redirectedFrom();
   }
 
-  const chain = [
-    requestedUrl,
-    ...requestUrls,
-    response.url(),
-  ];
+  const chain = [requestedUrl, ...requestUrls, response.url()];
 
-  return chain.filter(
-    (url, index) =>
-      index === 0 ||
-      url !==
-        chain[index - 1],
-  );
+  return chain.filter((url, index) => index === 0 || url !== chain[index - 1]);
 }
 
 /**
@@ -535,20 +409,12 @@ function buildRedirectChain(
  * ============================================================
  */
 
-async function scanPage(
-  context: BrowserContext,
-  url: string,
-): Promise<void> {
-  if (
-    pagesScanned >=
-    MAX_PAGES
-  ) {
+async function scanPage(context: BrowserContext, url: string): Promise<void> {
+  if (pagesScanned >= MAX_PAGES) {
     return;
   }
 
-  if (
-    visited.has(url)
-  ) {
+  if (visited.has(url)) {
     return;
   }
 
@@ -558,29 +424,21 @@ async function scanPage(
 
   pagesScanned++;
 
-  const page: Page =
-    await context.newPage();
+  const page: Page = await context.newPage();
 
-  console.log(
-    `[${pagesScanned}] Scanning: ${url}`,
-  );
+  console.log(`[${pagesScanned}] Scanning: ${url}`);
 
   try {
-    const response =
-      await page.goto(url, {
-        waitUntil:
-          'domcontentloaded',
+    const response = await page.goto(url, {
+      waitUntil: 'domcontentloaded',
 
-        timeout:
-          NAVIGATION_TIMEOUT,
-      });
+      timeout: NAVIGATION_TIMEOUT,
+    });
 
     if (!response) {
       failedPages++;
 
-      console.log(
-        `⚠ No HTTP response: ${url}`,
-      );
+      console.log(`⚠ No HTTP response: ${url}`);
 
       return;
     }
@@ -594,74 +452,39 @@ async function scanPage(
      * ========================================================
      */
 
-    const finalPageUrl =
-      page.url();
+    const finalPageUrl = page.url();
 
-    if (
-      finalPageUrl !== url &&
-      isNonProdUrl(
-        finalPageUrl,
-      )
-    ) {
-      const redirectChain =
-        buildRedirectChain(
-          response,
-          url,
-        );
+    if (finalPageUrl !== url && isNonProdUrl(finalPageUrl)) {
+      const redirectChain = buildRedirectChain(response, url);
 
       addFinding({
-        type:
-          'REDIRECT_TO_NON_PROD',
+        type: 'REDIRECT_TO_NON_PROD',
 
         sourcePage: url,
 
-        linkText:
-          '(page navigation)',
+        linkText: '(page navigation)',
 
         originalUrl: url,
 
-        finalUrl:
-          finalPageUrl,
+        finalUrl: finalPageUrl,
 
         redirectChain,
       });
 
       console.log('');
 
-      console.log(
-        '🚨 REDIRECT TO NON-PROD FOUND',
-      );
+      console.log('🚨 REDIRECT TO NON-PROD FOUND');
 
-      console.log(
-        `Requested: ${url}`,
-      );
+      console.log(`Requested: ${url}`);
 
-      console.log(
-        `Final:     ${finalPageUrl}`,
-      );
+      console.log(`Final:     ${finalPageUrl}`);
 
-      if (
-        redirectChain.length >
-        1
-      ) {
-        console.log(
-          'Redirect chain:',
-        );
+      if (redirectChain.length > 1) {
+        console.log('Redirect chain:');
 
-        redirectChain.forEach(
-          (
-            redirect,
-            index,
-          ) => {
-            console.log(
-              `  ${
-                index === 0
-                  ? 'START'
-                  : '↓'
-              } ${redirect}`,
-            );
-          },
-        );
+        redirectChain.forEach((redirect, index) => {
+          console.log(`  ${index === 0 ? 'START' : '↓'} ${redirect}`);
+        });
       }
 
       console.log('');
@@ -678,65 +501,36 @@ async function scanPage(
      * ========================================================
      */
 
-    const links =
-      await page
-        .locator('a[href]')
-        .evaluateAll(
-          (anchors) =>
-            anchors.map(
-              (anchor) => {
-                const element =
-                  anchor as HTMLAnchorElement;
+    const links = await page.locator('a[href]').evaluateAll((anchors) =>
+      anchors.map((anchor) => {
+        const element = anchor as HTMLAnchorElement;
 
-                return {
-                  href:
-                    element.href,
+        return {
+          href: element.href,
 
-                  rawHref:
-                    element.getAttribute(
-                      'href',
-                    ) || '',
+          rawHref: element.getAttribute('href') || '',
 
-                  text:
-                    element.innerText
-                      ?.trim() ||
-                    element.textContent
-                      ?.trim() ||
-                    '',
-                };
-              },
-            ),
-        );
+          text: element.innerText?.trim() || element.textContent?.trim() || '',
+        };
+      }),
+    );
 
-    for (
-      const link of links
-    ) {
+    for (const link of links) {
       if (!link.href) {
         continue;
       }
 
-      if (
-        isIgnoredProtocol(
-          link.rawHref,
-        )
-      ) {
+      if (isIgnoredProtocol(link.rawHref)) {
         continue;
       }
 
-      const normalized =
-        normalizeUrl(
-          link.href,
-        );
+      const normalized = normalizeUrl(link.href);
 
       if (!normalized) {
         continue;
       }
 
-      if (
-        isIgnoredFile(
-          normalized,
-        )
-      ) {
+      if (isIgnoredFile(normalized)) {
         continue;
       }
 
@@ -750,51 +544,30 @@ async function scanPage(
        * ======================================================
        */
 
-      if (
-        isNonProdUrl(
-          normalized,
-        )
-      ) {
+      if (isNonProdUrl(normalized)) {
         addFinding({
-          type:
-            'DIRECT_NON_PROD_LINK',
+          type: 'DIRECT_NON_PROD_LINK',
 
           sourcePage: url,
 
-          linkText:
-            link.text,
+          linkText: link.text,
 
-          originalUrl:
-            normalized,
+          originalUrl: normalized,
 
-          finalUrl:
-            normalized,
+          finalUrl: normalized,
 
-          redirectChain: [
-            normalized,
-          ],
+          redirectChain: [normalized],
         });
 
         console.log('');
 
-        console.log(
-          '🚨 DIRECT NON-PROD LINK FOUND',
-        );
+        console.log('🚨 DIRECT NON-PROD LINK FOUND');
 
-        console.log(
-          `Source: ${url}`,
-        );
+        console.log(`Source: ${url}`);
 
-        console.log(
-          `Link:   ${
-            link.text ||
-            '(no text)'
-          }`,
-        );
+        console.log(`Link:   ${link.text || '(no text)'}`);
 
-        console.log(
-          `Target: ${normalized}`,
-        );
+        console.log(`Target: ${normalized}`);
 
         console.log('');
 
@@ -812,33 +585,18 @@ async function scanPage(
        * ======================================================
        */
 
-      if (
-        isInternalProdUrl(
-          normalized,
-        )
-      ) {
-        enqueue(
-          normalized,
-        );
+      if (isInternalProdUrl(normalized)) {
+        enqueue(normalized);
       }
     }
   } catch (error) {
     failedPages++;
 
-    const message =
-      error instanceof Error
-        ? error.message.split(
-            '\n',
-          )[0]
-        : String(error);
+    const message = error instanceof Error ? error.message.split('\n')[0] : String(error);
 
-    console.log(
-      `⚠ Failed: ${url}`,
-    );
+    console.log(`⚠ Failed: ${url}`);
 
-    console.log(
-      `  ${message}`,
-    );
+    console.log(`  ${message}`);
   } finally {
     await page.close();
   }
@@ -850,85 +608,44 @@ async function scanPage(
  * ============================================================
  */
 
-function createReport():
-  ScanReport {
-  const matchingPages = [
-    ...new Set(
-      findings.map(
-        (finding) =>
-          finding.sourcePage,
-      ),
-    ),
-  ].sort();
+function createReport(): ScanReport {
+  const matchingPages = [...new Set(findings.map((finding) => finding.sourcePage))].sort();
 
-  const directLinks =
-    findings.filter(
-      (finding) =>
-        finding.type ===
-        'DIRECT_NON_PROD_LINK',
-    );
+  const directLinks = findings.filter((finding) => finding.type === 'DIRECT_NON_PROD_LINK');
 
-  const redirects =
-    findings.filter(
-      (finding) =>
-        finding.type ===
-        'REDIRECT_TO_NON_PROD',
-    );
+  const redirects = findings.filter((finding) => finding.type === 'REDIRECT_TO_NON_PROD');
 
-  const completedAt =
-    new Date();
+  const completedAt = new Date();
 
-  const durationSeconds =
-    (completedAt.getTime() -
-      startedAt.getTime()) /
-    1000;
+  const durationSeconds = (completedAt.getTime() - startedAt.getTime()) / 1000;
 
-  const scanLimitReached =
-    pagesScanned >=
-    MAX_PAGES;
+  const scanLimitReached = pagesScanned >= MAX_PAGES;
 
-  const scanCompleted =
-    !scanLimitReached &&
-    queue.length === 0;
+  const scanCompleted = !scanLimitReached && queue.length === 0;
 
   return {
     scan: {
-      name:
-        SCAN_NAME,
+      name: SCAN_NAME,
 
-      startUrl:
-        START_URL,
+      startUrl: START_URL,
 
-      productionHost:
-        PROD_HOST,
+      productionHost: PROD_HOST,
 
-      nonProdPatterns:
-        NON_PROD_HOST_PATTERNS,
+      nonProdPatterns: NON_PROD_HOST_PATTERNS,
 
-      maxPages:
-        MAX_PAGES,
+      maxPages: MAX_PAGES,
 
-      concurrency:
-        CONCURRENCY,
+      concurrency: CONCURRENCY,
 
-      navigationTimeout:
-        NAVIGATION_TIMEOUT,
+      navigationTimeout: NAVIGATION_TIMEOUT,
 
-      failOnFindings:
-        FAIL_ON_FINDINGS,
+      failOnFindings: FAIL_ON_FINDINGS,
 
-      startedAt:
-        startedAt.toISOString(),
+      startedAt: startedAt.toISOString(),
 
-      completedAt:
-        completedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
 
-      durationSeconds:
-        Number(
-          durationSeconds.toFixed(
-            2,
-          ),
-        ),
+      durationSeconds: Number(durationSeconds.toFixed(2)),
     },
 
     summary: {
@@ -938,20 +655,15 @@ function createReport():
 
       failedPages,
 
-      directNonProdLinks:
-        directLinks.length,
+      directNonProdLinks: directLinks.length,
 
-      redirectsToNonProd:
-        redirects.length,
+      redirectsToNonProd: redirects.length,
 
-      totalFindings:
-        findings.length,
+      totalFindings: findings.length,
 
-      matchingPages:
-        matchingPages.length,
+      matchingPages: matchingPages.length,
 
-      pagesRemainingInQueue:
-        queue.length,
+      pagesRemainingInQueue: queue.length,
 
       scanLimitReached,
 
@@ -960,35 +672,21 @@ function createReport():
 
     matchingPages,
 
-    findings:
-      findings.map(
-        (
-          finding,
-          index,
-        ) => ({
-          id:
-            index + 1,
+    findings: findings.map((finding, index) => ({
+      id: index + 1,
 
-          type:
-            finding.type,
+      type: finding.type,
 
-          sourcePage:
-            finding.sourcePage,
+      sourcePage: finding.sourcePage,
 
-          linkText:
-            finding.linkText ||
-            null,
+      linkText: finding.linkText || null,
 
-          originalUrl:
-            finding.originalUrl,
+      originalUrl: finding.originalUrl,
 
-          finalUrl:
-            finding.finalUrl,
+      finalUrl: finding.finalUrl,
 
-          redirectChain:
-            finding.redirectChain,
-        }),
-      ),
+      redirectChain: finding.redirectChain,
+    })),
   };
 }
 
@@ -998,79 +696,44 @@ function createReport():
  * ============================================================
  */
 
-async function saveJsonReports(
-  report: ScanReport,
-): Promise<{
+async function saveJsonReports(report: ScanReport): Promise<{
   versionedPath: string;
 
   latestPath: string;
 }> {
-  await mkdir(
-    OUTPUT_DIRECTORY,
-    {
-      recursive: true,
-    },
-  );
+  await mkdir(OUTPUT_DIRECTORY, {
+    recursive: true,
+  });
 
   /**
    * Example:
    *
    * 2026-08-21T13-45-32
    */
-  const timestamp =
-    new Date()
-      .toISOString()
-      .replace(
-        /:/g,
-        '-',
-      )
-      .replace(
-        /\.\d{3}Z$/,
-        '',
-      );
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/:/g, '-')
+    .replace(/\.\d{3}Z$/, '');
 
-  const versionedFileName =
-    `non-prod-scan-${timestamp}.json`;
+  const versionedFileName = `non-prod-scan-${timestamp}.json`;
 
-  const latestFileName =
-    'latest.json';
+  const latestFileName = 'latest.json';
 
-  const versionedPath =
-    join(
-      OUTPUT_DIRECTORY,
-      versionedFileName,
-    );
+  const versionedPath = join(OUTPUT_DIRECTORY, versionedFileName);
 
-  const latestPath =
-    join(
-      OUTPUT_DIRECTORY,
-      latestFileName,
-    );
+  const latestPath = join(OUTPUT_DIRECTORY, latestFileName);
 
-  const json =
-    JSON.stringify(
-      report,
-      null,
-      2,
-    );
+  const json = JSON.stringify(report, null, 2);
 
   /**
    * Historical/versioned report.
    */
-  await writeFile(
-    versionedPath,
-    json,
-    'utf-8',
-  );
+  await writeFile(versionedPath, json, 'utf-8');
 
   /**
    * Always represents the most recent scan.
    */
-  await writeFile(
-    latestPath,
-    json,
-    'utf-8',
-  );
+  await writeFile(latestPath, json, 'utf-8');
 
   return {
     versionedPath,
@@ -1084,246 +747,120 @@ async function saveJsonReports(
  * ============================================================
  */
 
-function printReport(
-  report: ScanReport,
-): void {
+function printReport(report: ScanReport): void {
   console.log('');
   console.log('');
 
-  console.log(
-    '============================================================',
-  );
+  console.log('============================================================');
 
-  console.log(
-    ' NON-PRODUCTION ENVIRONMENT SCAN REPORT',
-  );
+  console.log(' NON-PRODUCTION ENVIRONMENT SCAN REPORT');
 
-  console.log(
-    '============================================================',
-  );
+  console.log('============================================================');
 
   console.log('');
 
-  if (
-    report.findings.length ===
-    0
-  ) {
-    console.log(
-      '✅ No non-production links or redirects found.',
-    );
+  if (report.findings.length === 0) {
+    console.log('✅ No non-production links or redirects found.');
   } else {
-    console.log(
-      'Matching pages:',
-    );
+    console.log('Matching pages:');
 
     console.log('');
 
-    report.matchingPages.forEach(
-      (page) => {
-        console.log(
-          `  ${page}`,
-        );
-      },
-    );
+    report.matchingPages.forEach((page) => {
+      console.log(`  ${page}`);
+    });
 
     console.log('');
 
-    console.log(
-      '------------------------------------------------------------',
-    );
+    console.log('------------------------------------------------------------');
 
-    console.log(
-      'Findings:',
-    );
+    console.log('Findings:');
 
-    console.log(
-      '------------------------------------------------------------',
-    );
+    console.log('------------------------------------------------------------');
 
-    report.findings.forEach(
-      (finding) => {
-        console.log('');
+    report.findings.forEach((finding) => {
+      console.log('');
 
-        console.log(
-          `#${finding.id}`,
-        );
+      console.log(`#${finding.id}`);
 
-        console.log(
-          `Type: ${
-            finding.type ===
-            'DIRECT_NON_PROD_LINK'
-              ? 'Direct non-prod link'
-              : 'Redirect to non-prod'
-          }`,
-        );
+      console.log(
+        `Type: ${
+          finding.type === 'DIRECT_NON_PROD_LINK' ? 'Direct non-prod link' : 'Redirect to non-prod'
+        }`,
+      );
 
-        console.log(
-          `Source page:  ${finding.sourcePage}`,
-        );
+      console.log(`Source page:  ${finding.sourcePage}`);
 
-        console.log(
-          `Link text:    ${
-            finding.linkText ||
-            '(no text)'
-          }`,
-        );
+      console.log(`Link text:    ${finding.linkText || '(no text)'}`);
 
-        console.log(
-          `Original URL: ${finding.originalUrl}`,
-        );
+      console.log(`Original URL: ${finding.originalUrl}`);
 
-        if (
-          finding.finalUrl !==
-          finding.originalUrl
-        ) {
-          console.log(
-            `Final URL:    ${finding.finalUrl}`,
-          );
-        }
+      if (finding.finalUrl !== finding.originalUrl) {
+        console.log(`Final URL:    ${finding.finalUrl}`);
+      }
 
-        if (
-          finding.redirectChain
-            .length > 1
-        ) {
-          console.log(
-            'Redirect chain:',
-          );
+      if (finding.redirectChain.length > 1) {
+        console.log('Redirect chain:');
 
-          finding.redirectChain.forEach(
-            (
-              redirect,
-              index,
-            ) => {
-              console.log(
-                `  ${
-                  index === 0
-                    ? 'START'
-                    : '↓'
-                } ${redirect}`,
-              );
-            },
-          );
-        }
-      },
-    );
+        finding.redirectChain.forEach((redirect, index) => {
+          console.log(`  ${index === 0 ? 'START' : '↓'} ${redirect}`);
+        });
+      }
+    });
   }
 
   console.log('');
   console.log('');
 
-  console.log(
-    'Summary:',
-  );
+  console.log('Summary:');
 
-  console.log(
-    `Scan name: ${report.scan.name}`,
-  );
+  console.log(`Scan name: ${report.scan.name}`);
 
-  console.log(
-    `Start URL: ${report.scan.startUrl}`,
-  );
+  console.log(`Start URL: ${report.scan.startUrl}`);
 
-  console.log(
-    `Production host: ${report.scan.productionHost}`,
-  );
+  console.log(`Production host: ${report.scan.productionHost}`);
 
-  console.log(
-    `Pages scanned: ${report.summary.pagesScanned}`,
-  );
+  console.log(`Pages scanned: ${report.summary.pagesScanned}`);
 
-  console.log(
-    `Links checked: ${report.summary.linksChecked}`,
-  );
+  console.log(`Links checked: ${report.summary.linksChecked}`);
 
-  console.log(
-    `Failed pages: ${report.summary.failedPages}`,
-  );
+  console.log(`Failed pages: ${report.summary.failedPages}`);
 
-  console.log(
-    `Direct non-prod links: ${report.summary.directNonProdLinks}`,
-  );
+  console.log(`Direct non-prod links: ${report.summary.directNonProdLinks}`);
 
-  console.log(
-    `Redirects to non-prod: ${report.summary.redirectsToNonProd}`,
-  );
+  console.log(`Redirects to non-prod: ${report.summary.redirectsToNonProd}`);
 
-  console.log(
-    `Total findings: ${report.summary.totalFindings}`,
-  );
+  console.log(`Total findings: ${report.summary.totalFindings}`);
 
-  console.log(
-    `Matching pages: ${report.summary.matchingPages}`,
-  );
+  console.log(`Matching pages: ${report.summary.matchingPages}`);
 
-  console.log(
-    `Pages remaining in queue: ${report.summary.pagesRemainingInQueue}`,
-  );
+  console.log(`Pages remaining in queue: ${report.summary.pagesRemainingInQueue}`);
 
-  console.log(
-    `Scan limit reached: ${
-      report.summary
-        .scanLimitReached
-        ? 'YES'
-        : 'NO'
-    }`,
-  );
+  console.log(`Scan limit reached: ${report.summary.scanLimitReached ? 'YES' : 'NO'}`);
 
-  console.log(
-    `Scan completed: ${
-      report.summary
-        .scanCompleted
-        ? 'YES'
-        : 'NO'
-    }`,
-  );
+  console.log(`Scan completed: ${report.summary.scanCompleted ? 'YES' : 'NO'}`);
 
-  console.log(
-    `Fail on findings: ${
-      report.scan
-        .failOnFindings
-        ? 'YES'
-        : 'NO'
-    }`,
-  );
+  console.log(`Fail on findings: ${report.scan.failOnFindings ? 'YES' : 'NO'}`);
 
-  console.log(
-    `Duration: ${report.scan.durationSeconds.toFixed(
-      2,
-    )} s`,
-  );
+  console.log(`Duration: ${report.scan.durationSeconds.toFixed(2)} s`);
 
-  if (
-    report.summary
-      .scanLimitReached
-  ) {
+  if (report.summary.scanLimitReached) {
     console.log('');
 
-    console.log(
-      '⚠ Scan stopped because MAX_PAGES was reached.',
-    );
+    console.log('⚠ Scan stopped because MAX_PAGES was reached.');
 
-    if (
-      report.summary
-        .pagesRemainingInQueue >
-      0
-    ) {
-      console.log(
-        `⚠ ${report.summary.pagesRemainingInQueue} discovered URLs were not scanned.`,
-      );
+    if (report.summary.pagesRemainingInQueue > 0) {
+      console.log(`⚠ ${report.summary.pagesRemainingInQueue} discovered URLs were not scanned.`);
     }
   }
 
   console.log('');
 
-  console.log(
-    `Process completed at ${report.scan.completedAt}`,
-  );
+  console.log(`Process completed at ${report.scan.completedAt}`);
 
   console.log('');
 
-  console.log(
-    '============================================================',
-  );
+  console.log('============================================================');
 }
 
 /**
@@ -1335,114 +872,57 @@ function printReport(
 async function main(): Promise<void> {
   console.log('');
 
-  console.log(
-    '============================================================',
-  );
+  console.log('============================================================');
 
-  console.log(
-    ' NON-PRODUCTION ENVIRONMENT SCANNER',
-  );
+  console.log(' NON-PRODUCTION ENVIRONMENT SCANNER');
 
-  console.log(
-    '============================================================',
-  );
+  console.log('============================================================');
 
   console.log('');
 
-  console.log(
-    `Scan name: ${SCAN_NAME}`,
-  );
+  console.log(`Scan name: ${SCAN_NAME}`);
 
-  console.log(
-    `Starting URL: ${START_URL}`,
-  );
+  console.log(`Starting URL: ${START_URL}`);
 
-  console.log(
-    `Production host: ${PROD_HOST}`,
-  );
+  console.log(`Production host: ${PROD_HOST}`);
 
-  console.log(
-    `Concurrency: ${CONCURRENCY}`,
-  );
+  console.log(`Concurrency: ${CONCURRENCY}`);
 
-  console.log(
-    `Max pages: ${MAX_PAGES}`,
-  );
+  console.log(`Max pages: ${MAX_PAGES}`);
 
-  console.log(
-    `Navigation timeout: ${NAVIGATION_TIMEOUT} ms`,
-  );
+  console.log(`Navigation timeout: ${NAVIGATION_TIMEOUT} ms`);
 
-  console.log(
-    `Fail on findings: ${FAIL_ON_FINDINGS}`,
-  );
+  console.log(`Fail on findings: ${FAIL_ON_FINDINGS}`);
 
-  console.log(
-    `Output directory: ${OUTPUT_DIRECTORY}`,
-  );
+  console.log(`Output directory: ${OUTPUT_DIRECTORY}`);
 
   console.log('');
 
-  const browser =
-    await chromium.launch({
-      headless: true,
-    });
+  const browser = await chromium.launch({
+    headless: true,
+  });
 
-  const context =
-    await browser.newContext({
-      ignoreHTTPSErrors:
-        true,
-    });
+  const context = await browser.newContext({
+    ignoreHTTPSErrors: true,
+  });
 
-  const normalizedStartUrl =
-    normalizeUrl(
-      START_URL,
-    );
+  const normalizedStartUrl = normalizeUrl(START_URL);
 
-  if (
-    !normalizedStartUrl
-  ) {
-    throw new Error(
-      `Invalid START_URL: ${START_URL}`,
-    );
+  if (!normalizedStartUrl) {
+    throw new Error(`Invalid START_URL: ${START_URL}`);
   }
 
-  enqueue(
-    normalizedStartUrl,
-  );
+  enqueue(normalizedStartUrl);
 
   try {
-    while (
-      queue.length > 0 &&
-      pagesScanned <
-        MAX_PAGES
-    ) {
-      const remainingCapacity =
-        MAX_PAGES -
-        pagesScanned;
+    while (queue.length > 0 && pagesScanned < MAX_PAGES) {
+      const remainingCapacity = MAX_PAGES - pagesScanned;
 
-      const batchSize =
-        Math.min(
-          CONCURRENCY,
-          remainingCapacity,
-          queue.length,
-        );
+      const batchSize = Math.min(CONCURRENCY, remainingCapacity, queue.length);
 
-      const batch =
-        queue.splice(
-          0,
-          batchSize,
-        );
+      const batch = queue.splice(0, batchSize);
 
-      await Promise.all(
-        batch.map(
-          (url) =>
-            scanPage(
-              context,
-              url,
-            ),
-        ),
-      );
+      await Promise.all(batch.map((url) => scanPage(context, url)));
     }
   } finally {
     await context.close();
@@ -1458,34 +938,19 @@ async function main(): Promise<void> {
    * all discovered URLs a second time.
    */
 
-  const report =
-    createReport();
+  const report = createReport();
 
-  printReport(
-    report,
-  );
+  printReport(report);
 
-  const {
-    versionedPath,
-    latestPath,
-  } =
-    await saveJsonReports(
-      report,
-    );
+  const { versionedPath, latestPath } = await saveJsonReports(report);
 
   console.log('');
 
-  console.log(
-    'JSON output:',
-  );
+  console.log('JSON output:');
 
-  console.log(
-    `Versioned: ${versionedPath}`,
-  );
+  console.log(`Versioned: ${versionedPath}`);
 
-  console.log(
-    `Latest:    ${latestPath}`,
-  );
+  console.log(`Latest:    ${latestPath}`);
 
   console.log('');
 
@@ -1496,33 +961,19 @@ async function main(): Promise<void> {
    * In strict mode, any finding causes exit code 1, allowing
    * GitHub Actions to use the scanner as a quality gate.
    */
-  if (
-    FAIL_ON_FINDINGS &&
-    findings.length > 0
-  ) {
-    console.error(
-      `❌ Scan failed: ${findings.length} non-production finding(s) detected.`,
-    );
+  if (FAIL_ON_FINDINGS && findings.length > 0) {
+    console.error(`❌ Scan failed: ${findings.length} non-production finding(s) detected.`);
 
     process.exitCode = 1;
   }
 }
 
-main().catch(
-  (error) => {
-    console.error('');
+main().catch((error) => {
+  console.error('');
 
-    console.error(
-      'Fatal crawler error:',
-    );
+  console.error('Fatal crawler error:');
 
-    console.error(
-      error instanceof Error
-        ? error.stack ||
-            error.message
-        : error,
-    );
+  console.error(error instanceof Error ? error.stack || error.message : error);
 
-    process.exitCode = 1;
-  },
-);
+  process.exitCode = 1;
+});
